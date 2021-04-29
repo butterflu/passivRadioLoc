@@ -1,0 +1,2 @@
+
+position = list with 2 elements: x and y coordinates [x, y]
