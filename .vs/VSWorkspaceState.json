@@ -1,8 +1,10 @@
 {
   "ExpandedNodes": [
     "",
-    "\\main_script"
+    "\\main_script",
+    "\\resources",
+    "\\scripts"
   ],
-  "SelectedNode": "\\main_script\\main.py",
+  "SelectedNode": "\\scripts\\test_wall.py",
   "PreviewInSolutionExplorer": false
 }

@@ -1,3 +1,5 @@
+import numpy
+
 class MainObject():
     def __init__(self, position=[0, 0]):
         self.position=position
@@ -34,3 +36,79 @@ class Wall():
             s=num2 / denominator
 
             return (r >= 0 and r <= 1) and (s >= 0 and s <= 1)
+
+class Node():
+    def __init__(self, position, tx_power):
+        self.position=position
+        self.tx_power=tx_power
+
+    def createRay(self, vector):
+        return Ray(self.position, self.tx_power, vector)
+
+    def createRayTrace(self, vector):
+        return RayTrace(self.position, self.tx_power, vector, self) #test of self reference
+
+
+class Ray():
+    def __init__(self,position, power, vector):
+        self.power=power
+        self.vector=vector
+        self.reflection_count=0
+        self.position=position
+
+    def applyLoss(self, loss):
+        self.power-=loss
+
+    def distanceLoss(self,distance):
+        loss=4*numpy.pi*distance*frequency/300000000
+        applyLoss(loss)
+        if self.power <= power_threshold:
+            return False
+        return True
+
+    def reflect(self, new_pos, new_vec, loss):
+        applyLoss(loss)
+        if self.power <= power_threshold or self.reflection_count == 2:
+            return False
+        self.position = new_pos
+        self.vector = new_vec
+        return True
+
+class RayTrace(Ray):
+    def __init__(self, position, power, vector, start_node):
+        super().__init__(position, power, vector)
+        self.position_list=[self.position]
+        self.start_node=start_node
+        self.end_node=None
+
+    def setEndNode(self,end_node):
+        self.end_node=end_node
+
+class Map():
+    def __init__(self,height,width):
+        self.height = height
+        self.width = width
+        self.objectList=[]
+
+    def addObject(self, obj):
+        self.objectList.append(obj)
+
+
+
+
+
+def readmapfromfile(filename):
+    f = open(filename, "r")
+    try:
+            map = Map(int(f.readline().strip()), int(f.readline().strip()))
+            line=f.readline()
+            while line!="":
+                if line[0] == '#':
+                    line=f.readline()
+                    continue
+                if line == "wall":
+                    map.addObject(Wall([int(f.readline().strip()), int(f.readline().strip())],[int(f.readline().strip()), int(f.readline().strip())]))
+                    continue
+    except any:
+        print("Error during map setup")
+        exit(-1)
