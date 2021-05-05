@@ -1,6 +1,7 @@
 import numpy
 from shapely import geometry
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as pyplot
+from descartes import PolygonPatch
 # from .globalconfig import *
 
 class MainObject():
@@ -54,8 +55,11 @@ class Node():
     def createRay(self, vector):
         return Ray(self.position, self.tx_power, vector)
 
-    def createRayTrace(self, vector):
-        return RayTrace(self.position, self.tx_power, vector, self) #test of self reference
+    def createRayTrace(self, angle):
+        return RayTrace(self.position, self.tx_power, angle, self) #test of self reference
+
+    def getCircle(self):
+        return geometry.Point(self.position[:]).buffer(5)
 
 
 class Ray():
@@ -84,8 +88,9 @@ class Ray():
         return True
 
 class RayTrace(Ray):
-    def __init__(self, position, power, vector, start_node):
-        super().__init__(position, power, vector)
+    def __init__(self, position, power, angle, start_node):
+        self.vector=[numpy.cos(angle)*1000, numpy.sin(angle)*1000]
+        super().__init__(position, power, self.vector)
         self.position_list=[self.position]
         self.start_node=start_node
         self.end_node=None
@@ -94,10 +99,12 @@ class RayTrace(Ray):
         self.end_node=end_node
     
     def getLineString(self):
+        if self.end_node==None:
+            return geometry.LineString([*self.position_list,self.vector])
         return geometry.LineString(self.position_list[:])
 
 class Map():
-    def __init__(self,height,width):
+    def __init__(self,width,height):
         self.height = height
         self.width = width
         self.objectList=[]
@@ -118,8 +125,9 @@ def readmapfromfile(filename):
                 if line[0] == '#':
                     line=f.readline()
                     continue
-                if line == "wall":
+                if line.strip() == "wall":
                     map.addObject(Wall([int(f.readline().strip()), int(f.readline().strip())],[int(f.readline().strip()), int(f.readline().strip())]))
+                    line=f.readline()
                     continue
     except FileNotFoundError:
         print("Error during map setup")
@@ -135,10 +143,20 @@ def readmapfromfile(filename):
 
 
 if __name__ == '__main__':
-    wall=Wall([5, 7], [2,1])
+    fig , ax = pyplot.subplots()
+    wall=Wall([100, 70], [20,5])
     x, y = wall.getLinearRing().xy
-    plt.plot(x,y)
+    ax.plot(x,y)
     map=readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\passivRadioLoc\\resources\\mapSettings.txt")
     x, y = map.getLinearRing().xy
-    plt.plot(x,y)
-    plt.show()
+    ax.plot(x,y)
+    node=Node([50,50],20)
+    patch = PolygonPatch(node.getCircle())
+    ax.add_patch(patch)
+    rayT = node.createRayTrace(45)
+    x, y = rayT.getLineString().xy
+    ax.plot(x,y)
+
+    pyplot.xlim([-2,610])
+    pyplot.ylim([-2,610])
+    pyplot.show()
