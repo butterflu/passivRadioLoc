@@ -11,4 +11,3 @@ Struktura Folderów
 3. Metody śledzenia: RSS, AOA
 4. Częstotliwość systemu : 7-8GHz
 5. Odbicia od śledzonego przedmiotu nie są uwzględniane
-6. 
