@@ -1,15 +1,21 @@
 import numpy
+from shapely import geometry
+import matplotlib.pyplot as plt
+# from .globalconfig import *
 
 class MainObject():
     def __init__(self, position=[0, 0]):
         self.position=position
         self.radius=4
 
-    def move(sel, x, y):
+    def move(self, x, y):
         self.position[0]+=x
         self.position[1]+=y
     def getPosition(self):
         return self.position
+
+    def getCircle(self):
+        return geometry.Point(self.position[:]).buffer(self.radius)
 
 class Wall():
     def __init__(self, position, size):
@@ -30,12 +36,15 @@ class Wall():
             num2=((point1[1]-point3[1])*(point2[0]-point1[0])) - ((point1[0]-point3[0])*(point2[1]-point1[1]))
 
             if (denominator == 0):
-                return num1 == 0 and num == 0
+                return num1 == 0 and num2 == 0
 
             r=num1 / denominator
             s=num2 / denominator
 
             return (r >= 0 and r <= 1) and (s >= 0 and s <= 1)
+
+    def getLinearRing(self):
+        return geometry.LinearRing(self.corners[:])
 
 class Node():
     def __init__(self, position, tx_power):
@@ -61,13 +70,13 @@ class Ray():
 
     def distanceLoss(self,distance):
         loss=4*numpy.pi*distance*frequency/300000000
-        applyLoss(loss)
+        self.applyLoss(loss)
         if self.power <= power_threshold:
             return False
         return True
 
     def reflect(self, new_pos, new_vec, loss):
-        applyLoss(loss)
+        self.applyLoss(loss)
         if self.power <= power_threshold or self.reflection_count == 2:
             return False
         self.position = new_pos
@@ -83,6 +92,9 @@ class RayTrace(Ray):
 
     def setEndNode(self,end_node):
         self.end_node=end_node
+    
+    def getLineString(self):
+        return geometry.LineString(self.position_list[:])
 
 class Map():
     def __init__(self,height,width):
@@ -93,10 +105,10 @@ class Map():
     def addObject(self, obj):
         self.objectList.append(obj)
 
+    def getLinearRing(self):
+        return geometry.LinearRing([[0,0],[0, self.height],[self.width, self.height],[self.width, 0]])
 
-
-
-
+#functions
 def readmapfromfile(filename):
     f = open(filename, "r")
     try:
@@ -109,6 +121,24 @@ def readmapfromfile(filename):
                 if line == "wall":
                     map.addObject(Wall([int(f.readline().strip()), int(f.readline().strip())],[int(f.readline().strip()), int(f.readline().strip())]))
                     continue
-    except any:
+    except FileNotFoundError:
         print("Error during map setup")
         exit(-1)
+
+    return map
+
+
+# def generateHeatmap(map: Map):
+#     heatmap=[[0 for col in range(map.width)] for row in range(map.height)]
+    
+    #for each point on map draw mainObcject and check if it intersects with all the rays + exclude impossible locations
+
+
+if __name__ == '__main__':
+    wall=Wall([5, 7], [2,1])
+    x, y = wall.getLinearRing().xy
+    plt.plot(x,y)
+    map=readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\passivRadioLoc\\resources\\mapSettings.txt")
+    x, y = map.getLinearRing().xy
+    plt.plot(x,y)
+    plt.show()

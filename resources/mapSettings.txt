@@ -1,6 +1,6 @@
-#room dimensions x y
 600 
 300
+#room dimensions x y
 #list of elements:
 #wall: pos x, pos y, size x, size y
 wall
