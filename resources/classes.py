@@ -4,6 +4,11 @@ import matplotlib.pyplot as pyplot
 from descartes import PolygonPatch
 # from .globalconfig import *
 
+#global variables
+frequency=7000000000 #7GHz
+power_threshold=0 #dbm
+wall_loss=20
+
 class MainObject():
     def __init__(self, position=[0, 0]):
         self.position=position
@@ -15,8 +20,12 @@ class MainObject():
     def getPosition(self):
         return self.position
 
-    def getCircle(self):
+    def getShape(self):
         return geometry.Point(self.position[:]).buffer(self.radius)
+
+    def plot(self, ax):
+        patch = PolygonPatch(self.getShape())
+        ax.add_patch(patch)
 
 class Wall():
     def __init__(self, position, size):
@@ -43,77 +52,118 @@ class Wall():
             s=num2 / denominator
 
             return (r >= 0 and r <= 1) and (s >= 0 and s <= 1)
+    
+    def getLineStringonPoint(self, point: geometry.Point):
+        points = list(self.getShape().coords)
+        for x in range(len(points)):
+            if geometry.LineString([points[x-1],points[x]]).contains(point):
+                return geometry.LineString([points[x-1],points[x]])
+        print("error point not on line")
 
-    def getLinearRing(self):
+
+    def getShape(self):
         return geometry.LinearRing(self.corners[:])
+
+    def plot(self, ax):
+        x,y = self.getShape().xy
+        ax.plot(x,y)
 
 class Node():
     def __init__(self, position, tx_power):
         self.position=position
         self.tx_power=tx_power
 
-    def createRay(self, vector):
-        return Ray(self.position, self.tx_power, vector)
-
     def createRayTrace(self, angle):
         return RayTrace(self.position, self.tx_power, angle, self) #test of self reference
 
-    def getCircle(self):
+    def getShape(self):
         return geometry.Point(self.position[:]).buffer(5)
 
+    def plot(self, ax):
+        patch = PolygonPatch(self.getShape())
+        ax.add_patch(patch)
 
-class Ray():
-    def __init__(self,position, power, vector):
+
+class RayTrace():
+    def __init__(self, position, power, angle, start_node):
         self.power=power
-        self.vector=vector
+        self.setVector(angle, position)
+        self.position_list=[position]
+        self.start_node=start_node
+        self.end_node=None
         self.reflection_count=0
-        self.position=position
+
+    def setEndNode(self,end_node: Node):
+        self.end_node=end_node
+        self.vector = None
+        self.position_list.append(end_node.position)
+
+    def setVector(self,angle,position):
+        self.vector=[numpy.cos(angle/180*numpy.pi)*1000+position[0], numpy.sin(angle/180*numpy.pi)*1000+position[1]]      #relative endpoint
+    
+    def getShape(self):
+        if self.end_node==None:
+            return geometry.LineString([*self.position_list,self.vector])
+        return geometry.LineString(self.position_list[:])
+    
+    def getCurrPoint(self):
+        return geometry.Point(*self.position_list[-1])
+
+    def plot(self, ax):
+        x,y = self.getShape().xy
+        ax.plot(x,y)
 
     def applyLoss(self, loss):
         self.power-=loss
 
     def distanceLoss(self,distance):
-        loss=4*numpy.pi*distance*frequency/300000000
+        loss=4*numpy.pi*distance/100*frequency/300000000
         self.applyLoss(loss)
         if self.power <= power_threshold:
             return False
         return True
 
-    def reflect(self, new_pos, new_vec, loss):
+    def reflect(self, new_pos, new_angle, loss):
         self.applyLoss(loss)
-        if self.power <= power_threshold or self.reflection_count == 2:
+        if self.power <= power_threshold or self.reflection_count > 100:
             return False
-        self.position = new_pos
-        self.vector = new_vec
+        self.position_list.append(list(*new_pos.coords))
+        self.setVector(new_angle, list(*new_pos.coords))
+        self.reflection_count+=1
         return True
 
-class RayTrace(Ray):
-    def __init__(self, position, power, angle, start_node):
-        self.vector=[numpy.cos(angle)*1000, numpy.sin(angle)*1000]
-        super().__init__(position, power, self.vector)
-        self.position_list=[self.position]
-        self.start_node=start_node
-        self.end_node=None
-
-    def setEndNode(self,end_node):
-        self.end_node=end_node
-    
-    def getLineString(self):
-        if self.end_node==None:
-            return geometry.LineString([*self.position_list,self.vector])
-        return geometry.LineString(self.position_list[:])
 
 class Map():
     def __init__(self,width,height):
         self.height = height
         self.width = width
-        self.objectList=[]
+        self.objectList=[self]
 
     def addObject(self, obj):
         self.objectList.append(obj)
 
-    def getLinearRing(self):
+    def getShape(self):
         return geometry.LinearRing([[0,0],[0, self.height],[self.width, self.height],[self.width, 0]])
+
+    def getObjectsShape(self):  #not used currently
+        shapes = [self.getShape()]
+        for obj in self.objectList:
+            shapes.append(obj.getShape)
+        return shapes
+
+    def plot(self, ax):
+        x,y = self.getShape().xy
+        ax.plot(x,y)
+        for object in self.objectList[1:]:
+            object.plot(ax)
+
+    def getLineStringonPoint(self, point: geometry.Point):
+        points = list(self.getShape().coords)
+        for x in range(len(points)):
+            if geometry.LineString([points[x-1],points[x]]).contains(point):
+                return geometry.LineString([points[x-1],points[x]])
+        print("error point not on line")
+
 
 #functions
 def readmapfromfile(filename):
@@ -129,11 +179,78 @@ def readmapfromfile(filename):
                     map.addObject(Wall([int(f.readline().strip()), int(f.readline().strip())],[int(f.readline().strip()), int(f.readline().strip())]))
                     line=f.readline()
                     continue
+                if line.strip() == "node":
+                    map.addObject(Node([int(f.readline().strip()), int(f.readline().strip())],70))      #txpower
+                    line=f.readline()
+                    continue
     except FileNotFoundError:
         print("Error during map setup")
         exit(-1)
 
     return map
+
+def getClosestPoint(point1, point_list):
+    if type(point_list) == geometry.Point:
+        return point_list
+    else:
+        dist = [ x.distance(point1) for x in point_list ]
+        return point_list[dist.index(min(dist))]
+
+
+def getReflectionAngle(line1: geometry.LineString, line2: geometry.LineString):
+    line2_uvector = [list(line2.coords)[1][x]-list(line2.coords)[0][x] for x in range(2)]
+    angle2 = (numpy.arctan2(line2_uvector[1],line2_uvector[0])*180/numpy.pi)
+    line1_uvector = [list(line1.coords)[1][x]-list(line1.coords)[0][x] for x in range(2)]
+    angle1 = (numpy.arctan2(line1_uvector[1],line1_uvector[0])*180/numpy.pi)
+    ref_angle = (angle2+90)-angle1
+    return (ref_angle+angle2-90)
+
+def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
+    rayShape = rayT.getShape()
+    distance = 0
+    for obj in map.objectList:
+        objShape = obj.getShape()
+        if rayShape.crosses(objShape):
+            inter = rayShape.intersection(objShape)
+            dist2 = rayT.getCurrPoint().distance(inter)
+            print(obj)
+            if (distance == 0 or dist2 < distance) and dist2>=0.01:
+                distance=dist2
+                reflectionObject = obj
+                reflectionPoint=inter
+    
+    if rayT.distanceLoss(distance):
+        if type(reflectionObject)==Node:        #check if node and if startnode
+            if not rayT.start_node == reflectionObject:
+                rayT.setEndNode(reflectionObject)
+                return "end"
+            else:
+                return "loss"
+        else:
+            print(ray.position_list[-1])
+            new_point = getClosestPoint(geometry.Point(ray.position_list[-1]),reflectionPoint)
+            new_angle = getReflectionAngle(geometry.LineString([rayT.position_list[-1],new_point]), reflectionObject.getLineStringonPoint(new_point))
+            if rayT.reflect(new_point,new_angle,wall_loss):     #loss from material
+                return "ref"
+            else:
+                return "ref_count"
+    else:
+        return "loss"
+
+def traceToEnd(rayT: RayTrace, map: Map, Mob: MainObject):
+    while True:
+        state = rayTracing(rayT, map, MainObject)
+        print(state)
+        if state == "ref":
+            continue
+        elif state == "end":
+            return True
+        else:
+            return False
+    
+
+
+
 
 
 # def generateHeatmap(map: Map):
@@ -144,19 +261,18 @@ def readmapfromfile(filename):
 
 if __name__ == '__main__':
     fig , ax = pyplot.subplots()
-    wall=Wall([100, 70], [20,5])
-    x, y = wall.getLinearRing().xy
-    ax.plot(x,y)
-    map=readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\passivRadioLoc\\resources\\mapSettings.txt")
-    x, y = map.getLinearRing().xy
-    ax.plot(x,y)
-    node=Node([50,50],20)
-    patch = PolygonPatch(node.getCircle())
-    ax.add_patch(patch)
-    rayT = node.createRayTrace(45)
-    x, y = rayT.getLineString().xy
-    ax.plot(x,y)
+    pyplot.xlim([-1,300])
+    pyplot.ylim([-1,301])
 
-    pyplot.xlim([-2,610])
-    pyplot.ylim([-2,610])
+    map=readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\passivRadioLoc\\resources\\mapSettings.txt")
+    map.plot(ax)
+    ray = RayTrace([100,275],9000,0,None)
+    # print(traceToEnd(ray,map,None))
+    rayTracing(ray,map,None)
+    # rayTracing(ray,map,None)
+    # rayTracing(ray,map,None)
+    # rayTracing(ray,map,None)
+    ray.plot(ax)
+
+
     pyplot.show()

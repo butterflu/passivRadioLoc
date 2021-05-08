@@ -1,2 +1,4 @@
 
 position = list with 2 elements: x and y coordinates [x, y]
+
+mapę rozbić na 4 elementy
