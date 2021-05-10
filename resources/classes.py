@@ -99,7 +99,8 @@ class RayTrace():
         self.position_list.append(end_node.position)
 
     def setVector(self,angle,position):
-        self.vector=[numpy.cos(angle/180*numpy.pi)*1000+position[0], numpy.sin(angle/180*numpy.pi)*1000+position[1]]      #relative endpoint
+        self.vector=[numpy.cos(angle/180*numpy.pi)*100000+position[0], numpy.sin(angle/180*numpy.pi)*100000+position[1]]      #relative endpoint
+        print(self.vector)
     
     def getShape(self):
         if self.end_node==None:
@@ -125,7 +126,7 @@ class RayTrace():
 
     def reflect(self, new_pos, new_angle, loss):
         self.applyLoss(loss)
-        if self.power <= power_threshold or self.reflection_count > 100:
+        if self.power <= power_threshold or self.reflection_count > 5:
             return False
         self.position_list.append(list(*new_pos.coords))
         self.setVector(new_angle, list(*new_pos.coords))
@@ -193,17 +194,27 @@ def getClosestPoint(point1, point_list):
     if type(point_list) == geometry.Point:
         return point_list
     else:
-        dist = [ x.distance(point1) for x in point_list ]
-        return point_list[dist.index(min(dist))]
+        dist = [[x, x.distance(point1)] for x in point_list if x.distance(point1)>0.01]
+        dist.sort(key=lambda x: x[1])
+        return dist[0][0]
 
 
 def getReflectionAngle(line1: geometry.LineString, line2: geometry.LineString):
     line2_uvector = [list(line2.coords)[1][x]-list(line2.coords)[0][x] for x in range(2)]
-    angle2 = (numpy.arctan2(line2_uvector[1],line2_uvector[0])*180/numpy.pi)
+    angle2 = ((numpy.arctan2(line2_uvector[1],line2_uvector[0])*180/numpy.pi)+360)%180
+    print("angle2:",angle2)
     line1_uvector = [list(line1.coords)[1][x]-list(line1.coords)[0][x] for x in range(2)]
-    angle1 = (numpy.arctan2(line1_uvector[1],line1_uvector[0])*180/numpy.pi)
-    ref_angle = (angle2+90)-angle1
-    return (ref_angle+angle2-90)
+    angle1 = ((numpy.arctan2(line1_uvector[1],line1_uvector[0])*180/numpy.pi)+360)%360
+    print("angle1:",angle1)
+    a=angle1-angle2
+    if a>=angle2 and a<angle2+90:
+        return (2*angle2-angle1)%360
+    elif a>=angle2+90 and a<angle2+180:
+        return (angle2-angle1)%360
+    elif a>=angle2+180 and a<angle2+270:
+        return (3*angle2+180-angle1)%360
+    elif a>=angle2+270 and a<angle2+360:-2250
+        return (3*angle2 - angle1)%360
 
 def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
     rayShape = rayT.getShape()
@@ -214,7 +225,7 @@ def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
             inter = rayShape.intersection(objShape)
             dist2 = rayT.getCurrPoint().distance(inter)
             print(obj)
-            if (distance == 0 or dist2 < distance) and dist2>=0.01:
+            if distance == 0 or dist2 < distance:
                 distance=dist2
                 reflectionObject = obj
                 reflectionPoint=inter
@@ -227,9 +238,9 @@ def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
             else:
                 return "loss"
         else:
-            print(ray.position_list[-1])
             new_point = getClosestPoint(geometry.Point(ray.position_list[-1]),reflectionPoint)
             new_angle = getReflectionAngle(geometry.LineString([rayT.position_list[-1],new_point]), reflectionObject.getLineStringonPoint(new_point))
+            print(new_angle, new_point)
             if rayT.reflect(new_point,new_angle,wall_loss):     #loss from material
                 return "ref"
             else:
@@ -266,13 +277,15 @@ if __name__ == '__main__':
 
     map=readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\passivRadioLoc\\resources\\mapSettings.txt")
     map.plot(ax)
-    ray = RayTrace([100,275],9000,0,None)
+    ray = RayTrace([100,275],9000,135,None)
     # print(traceToEnd(ray,map,None))
     rayTracing(ray,map,None)
-    # rayTracing(ray,map,None)
-    # rayTracing(ray,map,None)
-    # rayTracing(ray,map,None)
+    # ray.plot(ax)
+    # pyplot.show()
+    rayTracing(ray,map,None)
+    # ray.plot(ax)
+    # pyplot.show()
+    rayTracing(ray,map,None)
+    rayTracing(ray,map,None)
     ray.plot(ax)
-
-
     pyplot.show()
