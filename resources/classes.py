@@ -91,29 +91,31 @@ class Node():
     def reciveRay(self, rayT):
         vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
         angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90
-        print(rayT.start_node, rayT.end_node)
         self.ray_list.append(RecivedRay(self.position, rayT.power, -angle , rayT.end_node, rayT.start_node))
 
+
     def retraceAllRecievedRays(self):
-        self.retraced_rays = [ray.traceBack() for ray in self.ray_list]
+        self.retraced_rays = [ray.traceBack() for ray in self.ray_list if ray.traceBack() is not None]
 
     def plotRecivedRays(self, ax):
+        if not hasattr(self, 'retraced_rays'):
+            return
         for ray in self.retraced_rays:
             ray.plot(ax)
 
     def traceBack(self, angle_list, end_node):
         for angle in angle_list:
             rayT = RayTrace(self.position, self.tx_power, angle, self)
-            traceToEnd(rayT, map, MO)
-            print(rayT.end_node, end_node)
-                # if end_node == rayT.end_node:
-            return rayT
+            if traceToEnd(rayT, map, MO):
+                if end_node is rayT.end_node:
+                    return rayT
     
     def sendRays(self, angle_list=[0,360]):
-        for angle in [x for x in range(angle_list[0],angle_list[1]*1)]:
+        for angle in [x for x in numpy.arange(angle_list[0],angle_list[1],1)]:
             rayT = RayTrace(self.position, self.tx_power, angle, self)
             if traceToEnd(rayT, map, MO):      #mainObj
                 ray_list.append(rayT)
+                rayT.end_node.reciveRay(rayT)
 
 class RayTrace():
     def __init__(self, position, power, angle: float, start_node):
@@ -128,7 +130,8 @@ class RayTrace():
         self.end_node=end_node
         self.vector = None
         self.position_list.append(end_node.position)
-        self.end_node.reciveRay(self)
+    
+       
 
     def setVector(self,angle,position):
         self.vector=[numpy.cos(angle/180*numpy.pi)*100000+position[0], numpy.sin(angle/180*numpy.pi)*100000+position[1]]      #relative endpoint
@@ -158,7 +161,7 @@ class RayTrace():
 
     def reflect(self, new_pos, new_angle, loss):
         self.applyLoss(loss)
-        if self.power <= power_threshold or self.reflection_count > 2:
+        if self.power <= power_threshold or self.reflection_count > 1:
             return False
         self.position_list.append(list(*new_pos.coords))
         self.setVector(new_angle, list(*new_pos.coords))
@@ -167,13 +170,13 @@ class RayTrace():
 
 class RecivedRay(RayTrace):
     def __init__(self, position, power, angle, start_node, end_node):
+        super().__init__(position, power, angle, start_node)
         self.end_node=end_node
         self.angle=angle
-        super().__init__(position, power, angle, start_node)
 
     def traceBack(self):
         # print(self.angle)
-        return self.start_node.traceBack([x*0.1 for x in numpy.arange(self.angle-angle_err,self.angle+angle_err)], self.end_node)
+        return self.start_node.traceBack(numpy.arange(self.angle-angle_err,self.angle+angle_err,0.1), self.end_node)
             
 
 class Map():
@@ -212,6 +215,14 @@ class Map():
                 return geometry.LineString([points[x-1],points[x]])
         print("error point not on line")
 
+    def retraceAllNodes(self):
+        for node in self.node_list:
+            node.retraceAllRecievedRays()
+
+    def plotRetracedRays(self, ax):
+        for node in self.node_list:
+            node.plotRecivedRays(ax)
+
     
 
 #functions
@@ -248,25 +259,23 @@ def getClosestPoint(point1, point_list):
         return dist[0][0]
 
 
-def getReflectionAngle(line1: geometry.LineString, line2: geometry.LineString):
+def getReflectionAngle(line1: geometry.LineString, line2: geometry.LineString, new_point: geometry.Point):
     line2_uvector = [list(line2.coords)[1][x]-list(line2.coords)[0][x] for x in range(2)]
     angle2 = ((numpy.arctan2(line2_uvector[1],line2_uvector[0])*180/numpy.pi)+360)%180
     # print("angle2:",angle2)
     line1_uvector = [list(line1.coords)[1][x]-list(line1.coords)[0][x] for x in range(2)]
     angle1 = ((numpy.arctan2(line1_uvector[1],line1_uvector[0])*180/numpy.pi)+360)%360
-    # print("angle1:",angle1)
-    a=(angle1-angle2+360)%360
-    return (2*angle2-angle1)%360
-    if a>=angle2 and a<angle2+90:
-        return (2*angle2-angle1)%360
-    elif a>=angle2+90 and a<angle2+180:
-        return (angle2-angle1)%360
-    elif a>=angle2+180 and a<angle2+270:
-        return (3*angle2+180-angle1)%360
-    elif (a>=(angle2+270)%360 and a<angle2%360) or (a>=angle2+270 and a<angle2):
-        return (3*angle2 - angle1)%360
-    else:
-        print("angle_error", a, angle2)
+    # print("angle1:",line1_uvector)
+    # return (2*angle2-angle1)%360
+    
+    if angle2==0:
+        vector=[line1_uvector[0] - list(line2.coords)[0][0], line1_uvector[1] - list(line2.coords)[0][1]]
+        vector[1]=-vector[1]
+        return ((numpy.arctan2(vector[1],vector[0])*180/numpy.pi)+360)%360
+    if angle2==90:
+        vector=[line1_uvector[0] - list(line2.coords)[0][0], line1_uvector[1]  - list(line2.coords)[0][1]]
+        vector[0]=-vector[0]
+        return ((numpy.arctan2(vector[1],vector[0])*180/numpy.pi)+360)%360
 
 
 def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
@@ -291,7 +300,7 @@ def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
                 return "loss"
         else:
             new_point = getClosestPoint(geometry.Point(rayT.position_list[-1]),reflectionPoint)
-            new_angle = getReflectionAngle(geometry.LineString([rayT.position_list[-1],new_point]), reflectionObject.getLineStringonPoint(new_point))
+            new_angle = getReflectionAngle(geometry.LineString([rayT.position_list[-1],rayT.vector]), reflectionObject.getLineStringonPoint(new_point), new_point)
             # print(new_angle, new_point)
             if rayT.reflect(new_point,new_angle,wall_loss):     #loss from material
                 return "ref"
@@ -323,8 +332,10 @@ def traceToEnd(rayT: RayTrace, map: Map, Mob: MainObject):
 
 if __name__ == '__main__':
     fig , (ax , ax2) = pyplot.subplots(1, 2)
-    pyplot.xlim([-1,300])
-    pyplot.ylim([-1,301])
+    ax.set_xlim([-1,300])
+    ax.set_ylim([-1,301])
+    ax2.set_xlim([-1,300])
+    ax2.set_ylim([-1,301])
     MO = MainObject([200,200])
     map=readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\passivRadioLoc\\resources\\mapSettings.txt")
     map.plot(ax)
@@ -334,9 +345,8 @@ if __name__ == '__main__':
         el.plot(ax)
 
     map.plot(ax2)
-    map.node_list[1].retraceAllRecievedRays()
-    # print( map.node_list[1].ray_list[:].end_node)
-    map.node_list[1].plotRecivedRays(ax2)
+    map.retraceAllNodes()
+    map.plotRetracedRays(ax2)
     
     pyplot.show()
 
