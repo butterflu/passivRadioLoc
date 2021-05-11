@@ -90,7 +90,7 @@ class Node():
     
     def reciveRay(self, rayT):
         vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
-        angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90
+        angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90+random.normalvariate(0,1)     #losowa pomyłka
         self.ray_list.append(RecivedRay(self.position, rayT.power, -angle , rayT.end_node, rayT.start_node))
 
 
@@ -259,20 +259,17 @@ def getClosestPoint(point1, point_list):
         return dist[0][0]
 
 
-def getReflectionAngle(line1: geometry.LineString, line2: geometry.LineString, new_point: geometry.Point):
+def getReflectionAngle(line1: geometry.LineString, line2: geometry.LineString):
     line2_uvector = [list(line2.coords)[1][x]-list(line2.coords)[0][x] for x in range(2)]
     angle2 = ((numpy.arctan2(line2_uvector[1],line2_uvector[0])*180/numpy.pi)+360)%180
-    # print("angle2:",angle2)
     line1_uvector = [list(line1.coords)[1][x]-list(line1.coords)[0][x] for x in range(2)]
-    angle1 = ((numpy.arctan2(line1_uvector[1],line1_uvector[0])*180/numpy.pi)+360)%360
-    # print("angle1:",line1_uvector)
-    # return (2*angle2-angle1)%360
+
     
     if angle2==0:
         vector=[line1_uvector[0] - list(line2.coords)[0][0], line1_uvector[1] - list(line2.coords)[0][1]]
         vector[1]=-vector[1]
         return ((numpy.arctan2(vector[1],vector[0])*180/numpy.pi)+360)%360
-    if angle2==90:
+    elif angle2==90:
         vector=[line1_uvector[0] - list(line2.coords)[0][0], line1_uvector[1]  - list(line2.coords)[0][1]]
         vector[0]=-vector[0]
         return ((numpy.arctan2(vector[1],vector[0])*180/numpy.pi)+360)%360
@@ -290,7 +287,6 @@ def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
                 distance=dist2
                 reflectionObject = obj
                 reflectionPoint=inter
-    
     if rayT.distanceLoss(distance):
         if type(reflectionObject)==Node:        #check if node and if startnode
             if not rayT.start_node == reflectionObject:
@@ -300,8 +296,7 @@ def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
                 return "loss"
         else:
             new_point = getClosestPoint(geometry.Point(rayT.position_list[-1]),reflectionPoint)
-            new_angle = getReflectionAngle(geometry.LineString([rayT.position_list[-1],rayT.vector]), reflectionObject.getLineStringonPoint(new_point), new_point)
-            # print(new_angle, new_point)
+            new_angle = getReflectionAngle(geometry.LineString([rayT.position_list[-1],rayT.vector]), reflectionObject.getLineStringonPoint(new_point))
             if rayT.reflect(new_point,new_angle,wall_loss):     #loss from material
                 return "ref"
             else:
