@@ -1,3 +1,4 @@
+from typing import List
 import numpy , time, random
 from shapely import geometry
 import matplotlib.pyplot as pyplot
@@ -26,7 +27,7 @@ class MainObject():
         return self.position
 
     def getShape(self):
-        return geometry.Point(self.position[:]).buffer(self.radius)
+        return geometry.Point(self.position).buffer(self.radius)
 
     def plot(self, ax):
         patch = PolygonPatch(self.getShape())
@@ -79,6 +80,10 @@ class Node():
         self.tx_power=tx_power
         self.ray_list=[]
         self.retraced_rays = []
+        self.reference_rays= [] 
+        self.ref_ray_list = []
+        self.missing_rays = []
+        
 
     def createRayTrace(self, angle):
         return RayTrace(self.position, self.tx_power, angle, self) #test of self reference
@@ -90,10 +95,41 @@ class Node():
         patch = PolygonPatch(self.getShape())
         ax.add_patch(patch)
     
-    def reciveRay(self, rayT):
-        vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
-        angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90+random.normalvariate(0,1)     #losowa pomyłka
-        self.ray_list.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , -angle , rayT.end_node, rayT.start_node))
+    def addReferenceRay(self, rayT):
+        self.reference_rays.append(rayT)
+
+    def recieveRays(self):
+        self.ray_list=[]
+        for rayT in self.reference_rays:
+            applyObjectLoss(MO, rayT)
+            if rayT.power == 0:
+                continue
+            vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
+            angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90+random.normalvariate(0,1)     #losowa pomyłka
+            self.ray_list.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , -angle , rayT.end_node, rayT.start_node))
+
+    def recieveRefRays(self):           #do once
+        for rayT in self.reference_rays:
+            vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
+            angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90+random.normalvariate(0,1)     #losowa pomyłka
+            self.ref_ray_list.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , -angle , rayT.end_node, rayT.start_node))
+
+    def findMissingRays(self):
+        missing_ref_rays = []
+        for refRay in self.ref_ray_list:
+            if checkifrayinlist(refRay, self.ray_list):
+                continue
+            missing_ref_rays.append(refRay)
+        if len(missing_ref_rays)>0:
+            missing_rays = []
+            for rayT in missing_rays:
+                vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
+                angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90+random.normalvariate(0,1)     #losowa pomyłka
+                missing_rays.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , -angle , rayT.end_node, rayT.start_node))
+            for ray in missing_rays:
+                rayt = ray.traceBack()
+                if rayt is not None:
+                    self.missing_rays.append(rayt)
 
 
     def retraceAllRecievedRays(self):
@@ -108,19 +144,32 @@ class Node():
         for ray in self.retraced_rays:
             ray.plot(ax)
 
+    def plotMissingRays(self, ax):
+        if len(self.missing_rays) == 0:
+            return
+        for ray in self.retraced_rays:
+            ray.plot(ax)
+
     def traceBack(self, angle_list, end_node):
         for angle in angle_list:
             rayT = RayTrace(self.position, self.tx_power, angle, self)
-            if traceToEnd(rayT, map, MO):
+            if traceToEnd(rayT, map):
                 if end_node is rayT.end_node:
                     return rayT
     
     def sendRays(self, angle_list=[0,360]):
         for angle in [x for x in numpy.arange(angle_list[0],angle_list[1],1)]:
             rayT = RayTrace(self.position, self.tx_power, angle, self)
-            if traceToEnd(rayT, map, MO):      #mainObj
+            if traceToEnd(rayT, map):      #mainObj
                 ray_list.append(rayT)
-                rayT.end_node.reciveRay(rayT)
+                rayT.end_node.addReferenceRay(rayT)
+
+
+    def repeat(self):
+        self.recieveRays()
+        self.findMissingRays()
+        self.retraceAllRecievedRays()
+        
 
 class RayTrace():
     def __init__(self, position, power, angle: float, start_node):
@@ -136,7 +185,10 @@ class RayTrace():
         self.vector = None
         self.position_list.append(end_node.position)
     
-       
+    def getAngle(self):
+        line = geometry.LineString([self.position_list[-2], self.position_list[-1]])
+        uvector = [list(line.coords)[1][x]-list(line.coords)[0][x] for x in range(2)]
+        return ((numpy.arctan2(uvector[1],uvector[0])*180/numpy.pi)+360)%180
 
     def setVector(self,angle,position):
         self.vector=[numpy.cos(angle/180*numpy.pi)*100000+position[0], numpy.sin(angle/180*numpy.pi)*100000+position[1]]      #relative endpoint
@@ -222,20 +274,46 @@ class Map():
                 return None
         print("error point not on line")
 
+    def getAllMissingRays(self):
+        missing_ray_list = []
+        for node in self.node_list:
+            if len(node.missing_rays)>0:
+                missing_ray_list.extend(*node.missing_rays)
+        return missing_ray_list
+
     def retraceAllNodes(self):
         for node in self.node_list:
+            node.recieveRays()
             node.retraceAllRecievedRays()
 
     def sendAllRays(self):
         for node in self.node_list:
             node.sendRays()
+
     def plotRetracedRays(self, ax):
         for node in self.node_list:
             node.plotRecivedRays(ax)
+            node.plotMissingRays(ax)
+
+    def once(self):
+        pass
+    
+    def repeat(self):
+        for node in self.node_list:
+            node.repeat()
 
     
 
 #functions
+def checkifrayinlist(ray: RayTrace, list: List):
+    for refRay in list:
+        ref_angle = refRay.getAngle()
+        angle = ray.getAngle()
+        if refRay.power > ray.power-4 and refRay.power < ray.power+4 and ref_angle > angle-4 and ref_angle < angle+4:
+            return True
+    return False
+
+
 def readmapfromfile(filename):
     f = open(filename, "r")
     try:
@@ -285,7 +363,7 @@ def getReflectionAngle(line1: geometry.LineString, line2: geometry.LineString):
         return ((numpy.arctan2(vector[1],vector[0])*180/numpy.pi)+360)%360
 
 
-def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
+def rayTracing(rayT: RayTrace, map: Map):
     rayShape = rayT.getShape()
     distance = 0
     for obj in [ob for ob in map.objectList if ob is not rayT.start_node]:
@@ -301,7 +379,6 @@ def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
         if type(reflectionObject)==Node:        #check if node and if startnode
             if not rayT.start_node == reflectionObject:
                 rayT.setEndNode(reflectionObject)
-                applyObjectLoss(Mob, rayT)
                 return "end"
             else:
                 return "loss"
@@ -318,9 +395,9 @@ def rayTracing(rayT: RayTrace, map: Map, Mob: MainObject):
     else:
         return "loss"
 
-def traceToEnd(rayT: RayTrace, map: Map, Mob: MainObject):
+def traceToEnd(rayT: RayTrace, map: Map):
     while True:
-        state = rayTracing(rayT, map, Mob)
+        state = rayTracing(rayT, map)
         if state == "ref":
             continue
         elif state == "end":
@@ -328,6 +405,7 @@ def traceToEnd(rayT: RayTrace, map: Map, Mob: MainObject):
         else:
             return False
     
+
 def applyObjectLoss(main_obj: MainObject, ray: RayTrace):
         if ray.getShape().intersects(main_obj.getShape()):
             ray.power = 0
@@ -355,9 +433,10 @@ if __name__ == '__main__':
     for el in ray_list:
         el.plot(ax)
 
+    MO.plot(ax)
+    MO.plot(ax2)
     map.plot(ax2)
-    applyObjectLoss(MO,map)
-    map.retraceAllNodes()
+    map.repeat()
     map.plotRetracedRays(ax2)
     
     pyplot.show()
