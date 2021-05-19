@@ -454,8 +454,8 @@ if __name__ == '__main__':
     map.plotMissingRays(ax2)
     heatmap = generateHeatmap(map)
     x, y  = numpy.where(heatmap == numpy.max(heatmap))
-    print(mean(x))
-    print(mean(y))
+    print(numpy.mean(x)*5)
+    print(numpy.mean(y)*5)
     pyplot.show()
 
     
