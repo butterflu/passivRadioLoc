@@ -1,3 +1,5 @@
+import enum
+from re import M
 from typing import List
 import numpy , time, random
 from shapely import geometry
@@ -104,15 +106,13 @@ class Node():
             applyObjectLoss(MO, rayT)
             if rayT.power == 0:
                 continue
-            vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
-            angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90+random.normalvariate(0,1)     #losowa pomyłka
-            self.ray_list.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , -angle , rayT.end_node, rayT.start_node))
+            angle=(rayT.getAngle()+random.normalvariate(0,1))%360
+            self.ray_list.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , angle , rayT.end_node, rayT.start_node))
 
     def recieveRefRays(self):           #do once
         for rayT in self.reference_rays:
-            vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
-            angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90+random.normalvariate(0,1)     #losowa pomyłka
-            self.ref_ray_list.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , -angle , rayT.end_node, rayT.start_node))
+            angle = (rayT.getAngle()+random.normalvariate(0,1))%360     #losowa pomyłka
+            self.ref_ray_list.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , angle , rayT.end_node, rayT.start_node))
 
     def findMissingRays(self):
         missing_ref_rays = []
@@ -122,10 +122,9 @@ class Node():
             missing_ref_rays.append(refRay)
         if len(missing_ref_rays)>0:
             missing_rays = []
-            for rayT in missing_rays:
-                vector = [rayT.position_list[-1][x]-rayT.position_list[-2][x] for x in range(2)]
-                angle = (numpy.arctan2(vector[0],vector[1])*180/numpy.pi)+90+random.normalvariate(0,1)     #losowa pomyłka
-                missing_rays.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , -angle , rayT.end_node, rayT.start_node))
+            for rayT in missing_ref_rays:
+                angle = (rayT.getAngle()+random.normalvariate(0,1))%360
+                missing_rays.append(RecivedRay(self.position, rayT.power+random.normalvariate(0,1) , angle , rayT.end_node, rayT.start_node))
             for ray in missing_rays:
                 rayt = ray.traceBack()
                 if rayt is not None:
@@ -144,12 +143,6 @@ class Node():
         for ray in self.retraced_rays:
             ray.plot(ax)
 
-    def plotMissingRays(self, ax):
-        if len(self.missing_rays) == 0:
-            return
-        for ray in self.retraced_rays:
-            ray.plot(ax)
-
     def traceBack(self, angle_list, end_node):
         for angle in angle_list:
             rayT = RayTrace(self.position, self.tx_power, angle, self)
@@ -164,6 +157,8 @@ class Node():
                 ray_list.append(rayT)
                 rayT.end_node.addReferenceRay(rayT)
 
+    def once(self):
+        self.recieveRefRays()
 
     def repeat(self):
         self.recieveRays()
@@ -186,13 +181,15 @@ class RayTrace():
         self.position_list.append(end_node.position)
     
     def getAngle(self):
-        line = geometry.LineString([self.position_list[-2], self.position_list[-1]])
+        if len(self.position_list)>=2:
+            line = geometry.LineString([self.position_list[-2], self.position_list[-1]])
+        else:
+            line = geometry.LineString([self.position_list[0], self.vector])
         uvector = [list(line.coords)[1][x]-list(line.coords)[0][x] for x in range(2)]
         return ((numpy.arctan2(uvector[1],uvector[0])*180/numpy.pi)+360)%180
 
     def setVector(self,angle,position):
         self.vector=[numpy.cos(angle/180*numpy.pi)*100000+position[0], numpy.sin(angle/180*numpy.pi)*100000+position[1]]      #relative endpoint
-        # print(self.vector)
     
     def getShape(self):
         if self.end_node==None:
@@ -232,8 +229,7 @@ class RecivedRay(RayTrace):
         self.angle=angle
 
     def traceBack(self):
-        # print(self.angle)
-        return self.start_node.traceBack(numpy.arange(self.angle-angle_err,self.angle+angle_err,0.02), self.end_node)
+        return self.start_node.traceBack(numpy.arange(self.angle-angle_err,self.angle+angle_err,0.05), self.end_node)   #accuracy
             
 
 class Map():
@@ -278,8 +274,14 @@ class Map():
         missing_ray_list = []
         for node in self.node_list:
             if len(node.missing_rays)>0:
-                missing_ray_list.extend(*node.missing_rays)
+                missing_ray_list.extend(node.missing_rays)
         return missing_ray_list
+
+    def plotMissingRays(self, ax):
+        if len(self.getAllMissingRays()) == 0:
+            return
+        for ray in self.getAllMissingRays():
+            ray.plot(ax)
 
     def retraceAllNodes(self):
         for node in self.node_list:
@@ -293,10 +295,12 @@ class Map():
     def plotRetracedRays(self, ax):
         for node in self.node_list:
             node.plotRecivedRays(ax)
-            node.plotMissingRays(ax)
 
     def once(self):
-        pass
+        self.sendAllRays()
+        for node in self.node_list:
+            node.once()
+        
     
     def repeat(self):
         for node in self.node_list:
@@ -410,14 +414,24 @@ def applyObjectLoss(main_obj: MainObject, ray: RayTrace):
         if ray.getShape().intersects(main_obj.getShape()):
             ray.power = 0
 
+def checkIfObjectIntersects(main_obj: geometry.Point, list: List):
+    mo_shape = main_obj.buffer(MO.radius)
+    for element in list:
+        if mo_shape.intersects(element.getShape()):
+            return True
+    return False
 
 
+def generateHeatmap(map: Map):
+    heatmap = numpy.zeros((int(map.width/5),int(map.height/5)))
 
-# def generateHeatmap(map: Map):
-#     heatmap=[[0 for col in range(map.width)] for row in range(map.height)]
-    
-    #for each point on map draw mainObcject and check if it intersects with all the rays + exclude impossible locations
+    for row  in range(map.width):
+        for cell in range(map.height):
+            object = geometry.Point([row, cell])
+            if checkIfObjectIntersects(object, map.getAllMissingRays()) and not checkIfObjectIntersects(object, map.objectList):
+                heatmap[int((row-row%5)/5)][int((cell-cell%5)/5)]+=1
 
+    return heatmap
 
 if __name__ == '__main__':
     fig , (ax , ax2) = pyplot.subplots(1, 2)
@@ -428,8 +442,7 @@ if __name__ == '__main__':
     MO = MainObject([130,256])
     map=readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\passivRadioLoc\\resources\\mapSettings.txt")
     map.plot(ax)
-    # map.objectList[2].sendRays()
-    map.sendAllRays()
+    map.once()
     for el in ray_list:
         el.plot(ax)
 
@@ -438,7 +451,11 @@ if __name__ == '__main__':
     map.plot(ax2)
     map.repeat()
     map.plotRetracedRays(ax2)
-    
+    map.plotMissingRays(ax2)
+    heatmap = generateHeatmap(map)
+    x, y  = numpy.where(heatmap == numpy.max(heatmap))
+    print(mean(x))
+    print(mean(y))
     pyplot.show()
 
     
