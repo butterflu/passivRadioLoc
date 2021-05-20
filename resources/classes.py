@@ -5,7 +5,6 @@ import numpy , time, random
 from shapely import geometry
 import matplotlib.pyplot as pyplot
 from descartes import PolygonPatch
-# from .globalconfig import *
 
 #global variables
 frequency=7000000000 #7GHz
@@ -151,7 +150,7 @@ class Node():
                     return rayT
     
     def sendRays(self, angle_list=[0,360]):
-        for angle in [x for x in numpy.arange(angle_list[0],angle_list[1],1)]:
+        for angle in [x for x in numpy.arange(angle_list[0],angle_list[1],1)]:  #dokładność wysyłania prmieni
             rayT = RayTrace(self.position, self.tx_power, angle, self)
             if traceToEnd(rayT, map):      #mainObj
                 ray_list.append(rayT)
