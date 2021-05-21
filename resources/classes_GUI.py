@@ -5,6 +5,8 @@ import numpy, time, random
 from shapely import geometry
 import matplotlib.pyplot as pyplot
 from descartes import PolygonPatch
+import csv
+import os
 
 # global variables
 frequency = 7000000000  # 7GHz
@@ -150,6 +152,7 @@ class Node():
             ray.plot(ax)
 
     def traceBack(self, angle_list, end_node):
+        global map, MO
         for angle in angle_list:
             rayT = RayTrace(self.position, self.tx_power, angle, self)
             if traceToEnd(rayT, map):
@@ -446,29 +449,68 @@ def generateHeatmap(map: Map):
     return heatmap
 
 
+def displayHeatMap(heatMap, estimatedPos, i):
+    # dorzucić jakby okręgi przewidywania od tego miejsca i cacy
+    heatMap[estimatedPos[0], estimatedPos[1]] += 50
+    heatMap = numpy.rot90(heatMap, k=1)
+    pyplot.figure(2)
+    pyplot.axis('off')
+    pyplot.title("Room heatmap")
+    pyplot.imshow(heatMap, cmap='viridis')
+    pyplot.colorbar()
+    pyplot.show()
+    string = 'heatmap' + str(i) + '.png'
+    pyplot.imsave(string, heatMap)
+
+
+def room_update():
+    pass
+
+
+def log(file, data):
+    with open(file, "a", newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(data)
+
+
 if __name__ == '__main__':
+    import main_script.room_1
+
     fig, (ax, ax2) = pyplot.subplots(1, 2)
     ax.set_xlim([-1, 300])
     ax.set_ylim([-1, 301])
     ax2.set_xlim([-1, 300])
     ax2.set_ylim([-1, 301])
     MO = MainObject([130, 256])
-    map = readmapfromfile(
-        "C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\passivRadioLoc\\resources\\mapSettings.txt")
+    map = readmapfromfile("C:\\Users\\marcin\\Desktop\\ES\\passivRadioLoc\\resources\\mapSettings.txt")
     map.plot(ax)
     map.once()
     for el in ray_list:
         el.plot(ax)
-
-    MO.plot(ax)
-    MO.plot(ax2)
-    map.plot(ax2)
-    map.repeat()
-    map.plotRetracedRays(ax2)
-    map.plotMissingRays(ax2)
-    heatmap = generateHeatmap(map)
-    x, y = numpy.where(heatmap == numpy.max(heatmap))
-    print(numpy.mean(x) * 5)
-    print(numpy.mean(y) * 5)
-    pyplot.show()
-
+    # Main loop
+    i = 1
+    while True:
+        # draw MO
+        MO.plot(ax)
+        MO.plot(ax2)
+        map.plot(ax2)
+        map.repeat()  # Tracing - obliczenia
+        map.plotRetracedRays(ax2)
+        map.plotMissingRays(ax2)
+        heatmap = generateHeatmap(map)
+        x, y = numpy.where(heatmap == numpy.max(heatmap))
+        print("Estymacja")
+        print("x= " + str(numpy.mean(x) * 5))
+        print("y= " + str(numpy.mean(y) * 5))
+        print("Rzeczywista pozycja")
+        print(MO.getPosition())
+        estimatedPos = [round(numpy.mean(x)), round(numpy.mean(y))]
+        displayHeatMap(heatmap, estimatedPos, i)
+        log('estymacja.csv', [numpy.mean(x), numpy.mean(y)])
+        log('real.csv', MO.getPosition())
+        pyplot.show()
+        fig.canvas.draw()
+        MO.move(-50, -50)
+        i += 1
+        if i == 4:
+            break
