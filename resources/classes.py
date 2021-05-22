@@ -340,7 +340,7 @@ def readmapfromfile(filename):
                 line = f.readline()
                 continue
             if line.strip() == "node":
-                map.addNode(Node([int(f.readline().strip()), int(f.readline().strip())], 700))  # txpower
+                map.addNode(Node([int(f.readline().strip()), int(f.readline().strip())], 600))  # txpower
 
                 line = f.readline()
                 continue
