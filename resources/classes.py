@@ -109,7 +109,7 @@ class Node():
                 continue
             angle = (rayT.getAngle() + random.normalvariate(0, 1)) % 360
             self.ray_list.append(
-                RecivedRay(self.position, rayT.power + random.normalvariate(0, 1), angle, rayT.end_node,
+                RecivedRay(self.position, 700 + random.normalvariate(0, 1), angle, rayT.end_node,
                            rayT.start_node))
 
     def recieveRefRays(self):  # do once
@@ -340,7 +340,7 @@ def readmapfromfile(filename):
                 line = f.readline()
                 continue
             if line.strip() == "node":
-                map.addNode(Node([int(f.readline().strip()), int(f.readline().strip())], 600))  # txpower
+                map.addNode(Node([int(f.readline().strip()), int(f.readline().strip())], 700))  # txpower
 
                 line = f.readline()
                 continue
