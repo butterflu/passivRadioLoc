@@ -400,7 +400,6 @@ def rayTracing(rayT: RayTrace, map: Map):
                 new_angle = getReflectionAngle(geometry.LineString([rayT.position_list[-1], rayT.vector]),
                                                reflectionObject.getLineStringonPoint(new_point))
             except:
-                print(reflectionPoint)
                 return "corner"
             if rayT.reflect(new_point, new_angle, wall_loss):  # loss from material
                 return "ref"
