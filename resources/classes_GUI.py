@@ -6,6 +6,7 @@ from shapely import geometry
 import matplotlib.pyplot as pyplot
 from descartes import PolygonPatch
 import csv
+from main_script import room_integrated_GUI
 import os
 
 # global variables
@@ -28,6 +29,10 @@ class MainObject():
 
     def getPosition(self):
         return self.position
+
+    def changePosition(self, coordinates):
+        self.position[0] = coordinates[0]
+        self.position[1] = coordinates[1]
 
     def getShape(self):
         return geometry.Point(self.position).buffer(self.radius)
@@ -474,8 +479,6 @@ def log(file, data):
 
 
 if __name__ == '__main__':
-    import main_script.room_1
-
     fig, (ax, ax2) = pyplot.subplots(1, 2)
     ax.set_xlim([-1, 300])
     ax.set_ylim([-1, 301])
@@ -487,14 +490,14 @@ if __name__ == '__main__':
     map.once()
     for el in ray_list:
         el.plot(ax)
+    room_GUI = room_integrated_GUI.GUI(map)
     # Main loop
     i = 1
     while True:
-        # draw MO
         MO.plot(ax)
         MO.plot(ax2)
         map.plot(ax2)
-        map.repeat()  # Tracing - obliczenia
+        map.repeat()
         map.plotRetracedRays(ax2)
         map.plotMissingRays(ax2)
         heatmap = generateHeatmap(map)
@@ -508,9 +511,11 @@ if __name__ == '__main__':
         displayHeatMap(heatmap, estimatedPos, i)
         log('estymacja.csv', [numpy.mean(x), numpy.mean(y)])
         log('real.csv', MO.getPosition())
+        room_GUI.main_loop()
         pyplot.show()
         fig.canvas.draw()
-        MO.move(-50, -50)
+        # MO.move(-50, -50)
+        MO.changePosition(room_GUI.getCurrentPos())
         i += 1
         if i == 4:
             break
