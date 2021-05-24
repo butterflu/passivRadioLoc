@@ -432,6 +432,12 @@ def checkIfObjectIntersects(main_obj: geometry.Point, list: List):
             return True
     return False
 
+def checkIfObjectIntersectsAll(main_obj: geometry.Point, list: List):
+    mo_shape = main_obj.buffer(MO.radius)
+    for element in list:
+        if not mo_shape.intersects(element.getShape()):
+            return False
+    return True
 
 def generateHeatmap(map: Map):
     heatmap = numpy.zeros((int(map.width / 5), int(map.height / 5)))
