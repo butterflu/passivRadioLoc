@@ -107,20 +107,21 @@ class Node():
             applyObjectLoss(MO, rayT)
             if rayT.power == 0:
                 continue
-            angle = (rayT.getAngle() + random.normalvariate(0, 1)) % 360
+            angle = (rayT.getAngle() + random.triangular(-2, 2)) % 360
             self.ray_list.append(
-                RecivedRay(self.position, 700 + random.normalvariate(0, 1), angle, rayT.end_node,
+                RecivedRay(self.position, rayT.power + random.triangular(-2, 2), angle, rayT.end_node,
                            rayT.start_node))
 
     def recieveRefRays(self):  # do once
         for rayT in self.reference_rays:
-            angle = (rayT.getAngle() + random.normalvariate(0, 1)) % 360  # losowa pomyłka
+            angle = (rayT.getAngle() + random.triangular(-0.5, 0.5)) % 360  # losowa pomyłka
             self.ref_ray_list.append(
-                RecivedRay(self.position, rayT.power + random.normalvariate(0, 1), angle, rayT.end_node,
+                RecivedRay(self.position, rayT.power + random.triangular(-2, 2), angle, rayT.end_node,
                            rayT.start_node))
 
     def findMissingRays(self):
         missing_ref_rays = []
+        self.missing_rays= []
         for refRay in self.ref_ray_list:
             if checkifrayinlist(refRay, self.ray_list):
                 continue
@@ -128,9 +129,9 @@ class Node():
         if len(missing_ref_rays) > 0:
             missing_rays = []
             for rayT in missing_ref_rays:
-                angle = (rayT.getAngle() + random.normalvariate(0, 1)) % 360
+                angle = (rayT.getAngle() + random.triangular(-2, 2)) % 360
                 missing_rays.append(
-                    RecivedRay(self.position, rayT.power + random.normalvariate(0, 1), angle, rayT.end_node,
+                    RecivedRay(self.position, rayT.power + random.triangular(-2, 2), angle, rayT.end_node,
                                rayT.start_node))
             for ray in missing_rays:
                 rayt = ray.traceBack()
@@ -168,8 +169,9 @@ class Node():
 
     def repeat(self):
         self.recieveRays()
-        self.findMissingRays()
         self.retraceAllRecievedRays()
+        self.findMissingRays()
+
 
 
 class RayTrace():
@@ -206,9 +208,9 @@ class RayTrace():
     def getCurrPoint(self):
         return geometry.Point(*self.position_list[-1])
 
-    def plot(self, ax):
+    def plot(self, ax, color='b'):
         x, y = self.getShape().xy
-        ax.plot(x, y)
+        ax.plot(x, y, color)
 
     def applyLoss(self, loss):
         self.power -= loss
@@ -290,7 +292,7 @@ class Map():
         if len(self.getAllMissingRays()) == 0:
             return
         for ray in self.getAllMissingRays():
-            ray.plot(ax)
+            ray.plot(ax, 'r')
 
     def retraceAllNodes(self):
         for node in self.node_list:
@@ -320,7 +322,7 @@ def checkifrayinlist(ray: RayTrace, list: List):
     for refRay in list:
         ref_angle = refRay.getAngle()
         angle = ray.getAngle()
-        if refRay.power > ray.power - 4 and refRay.power < ray.power + 4 and ref_angle > angle - 4 and ref_angle < angle + 4:
+        if   ref_angle > angle - 4 and ref_angle < angle + 4 and refRay.power > ray.power - 10 and refRay.power < ray.power + 10:
             return True
     return False
 
@@ -445,7 +447,7 @@ def generateHeatmap(map: Map):
     for row in range(map.width):
         for cell in range(map.height):
             object = geometry.Point([row, cell])
-            if checkIfObjectIntersects(object, map.getAllMissingRays()) and not checkIfObjectIntersects(object,
+            if checkIfObjectIntersectsAll(object, map.getAllMissingRays()) and not checkIfObjectIntersects(object,
                                                                                                         map.objectList):
                 heatmap[int((row - row % 5) / 5)][int((cell - cell % 5) / 5)] += 1
 
