@@ -5,6 +5,7 @@ import numpy, time, random
 from shapely import geometry
 import matplotlib.pyplot as pyplot
 from descartes import PolygonPatch
+from shapely.geometry import point
 
 # global variables
 frequency = 7000000000  # 7GHz
@@ -183,10 +184,10 @@ class RayTrace():
         self.end_node = None
         self.reflection_count = 0
 
-    def setEndNode(self, end_node: Node):
+    def setEndNode(self, point: geometry.Point, end_node: Node):
         self.end_node = end_node
         self.vector = None
-        self.position_list.append(end_node.position)
+        self.position_list.append(point)
 
     def getAngle(self):
         if len(self.position_list) >= 2:
@@ -356,6 +357,12 @@ def readmapfromfile(filename):
 def getClosestPoint(point1, point_list):
     if type(point_list) == geometry.Point:
         return point_list
+    elif type(point_list)==geometry.LineString:
+        ends = point_list.coords
+        if point1.distance(geometry.Point(ends[0])) < point1.distance(geometry.Point(ends[1])):
+            return ends[0]
+        else:
+            return ends[1]
     else:
         dist = [[x, x.distance(point1)] for x in point_list if x.distance(point1) > 0.01]
         dist.sort(key=lambda x: x[1])
@@ -392,7 +399,8 @@ def rayTracing(rayT: RayTrace, map: Map):
     if rayT.distanceLoss(distance):
         if type(reflectionObject) == Node:  # check if node and if startnode
             if not rayT.start_node == reflectionObject:
-                rayT.setEndNode(reflectionObject)
+                new_point = getClosestPoint(geometry.Point(rayT.position_list[-1]), reflectionPoint)
+                rayT.setEndNode(new_point, reflectionObject)
                 return "end"
             else:
                 return "loss"
