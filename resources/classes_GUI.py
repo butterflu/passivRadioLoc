@@ -16,13 +16,23 @@ wall_loss = 20
 ray_list = []
 angle_err = 2
 random.seed(time.time())
-automated = False   # object moves on fixed track, when false code is run with GUI
+no_logs = 1     # iteration to properly save logs ascending
+automated = True   # object moves on fixed track, when false code is run with GUI
+setPath = True  # if there is a pth configured
+objectPath = "C:\\Users\\marcin\\Desktop\\ES\\passivRadioLoc\\resources\\objectPath.txt"
 
 
 class MainObject():
     def __init__(self, position=[0, 0]):
         self.position = position
         self.radius = 4
+        self.path = []
+        self.steps = 1
+        if automated and setPath:
+            self.scheduleObjectPath(objectPath)
+            self.changePosition(self.path[0])
+            self.path.pop(0)
+            self.steps = len(self.path)
 
     def move(self, x, y):
         self.position[0] += x
@@ -41,6 +51,26 @@ class MainObject():
     def plot(self, ax):
         patch = PolygonPatch(self.getShape())
         ax.add_patch(patch)
+
+    def scheduleObjectPath(self, filename):
+        f = open(filename, "r")
+        self.path = []
+
+        try:
+            line = f.readline()
+            while line != "":
+                if line[0] == '#':
+                    line = f.readline()
+                    continue
+                if line.strip() == "stop":
+                    x = (int(f.readline().strip()))
+                    y = (int(f.readline().strip()))
+                    self.path.append([x, y])
+                    line = f.readline()
+                    continue
+        except FileNotFoundError:
+            print("Error during scheduling the object path")
+            exit(-1)
 
 
 class Wall():
@@ -471,7 +501,7 @@ def generateHeatmap(map: Map):
     return heatmap
 
 
-def displayHeatMap(heatMap, i):
+def displayHeatMap(heatMap):
     heatMap = numpy.rot90(heatMap, k=1)
     pyplot.figure(2)
     pyplot.axis('off')
@@ -480,7 +510,7 @@ def displayHeatMap(heatMap, i):
     pyplot.clim(0, 10)
     pyplot.colorbar()
     pyplot.show()
-    string = 'heatmap' + str(i) + '.png'
+    string = '../logs/heatmap' + str(no_logs) + '.png'
     pyplot.imsave(string, heatMap)
 
 def log(file, data):
@@ -520,14 +550,17 @@ def updateMap():
         estimatedPos = [estimated_x, estimated_y]
     else:
         estimatedPos = [0, 0]
-    displayHeatMap(heatmap, i)
-    log('estymacja.csv', [estimatedPos[0], estimatedPos[1]])
-    log('real.csv', MO.getPosition())
+    displayHeatMap(heatmap)
+    log('../logs/estymacja.csv', [estimatedPos[0], estimatedPos[1]])
+    log('../logs/real.csv', MO.getPosition())
     if not automated:
         room_GUI.main_loop()
         MO.changePosition(room_GUI.getCurrentPos())
     else:
-        MO.changePosition([200, 130])
+        MO.changePosition(MO.path[0])
+        MO.path.pop(0)
+    string = '../logs/raymap' + str(no_logs) + '.png'
+    fig.savefig(string, dpi=100)
     pyplot.show()
 
 def clearMissingRays():
@@ -542,11 +575,11 @@ if __name__ == '__main__':
     if not automated:
         room_GUI = room_integrated_GUI.GUI(map)
     # Main loop
-    i = 1
     while True:
         updateMap()
         clearMissingRays()
         fig, (ax, ax2) = drawSendRays()
-        i += 1
-        if i == 3:
+        MO.steps -= 1
+        no_logs += 1
+        if MO.steps == 0:
             break
