@@ -6,7 +6,7 @@ from shapely import geometry
 import matplotlib.pyplot as pyplot
 from descartes import PolygonPatch
 import csv
-from main_script import room_integrated_GUI
+#from main_script import room_integrated_GUI
 import os
 
 # global variables
@@ -114,20 +114,21 @@ class Node():
             applyObjectLoss(MO, rayT)
             if rayT.power == 0:
                 continue
-            angle = (rayT.getAngle() + random.normalvariate(0, 1)) % 360
+            angle = (rayT.getAngle() + random.triangular(-2, 2)) % 360
             self.ray_list.append(
-                RecivedRay(self.position, rayT.power + random.normalvariate(0, 1), angle, rayT.end_node,
+                RecivedRay(self.position, rayT.power + random.triangular(-2, 2), angle, rayT.end_node,
                            rayT.start_node))
 
     def recieveRefRays(self):  # do once
         for rayT in self.reference_rays:
-            angle = (rayT.getAngle() + random.normalvariate(0, 1)) % 360  # losowa pomyłka
+            angle = (rayT.getAngle() + random.triangular(-0.5, 0.5)) % 360  # losowa pomyłka
             self.ref_ray_list.append(
-                RecivedRay(self.position, rayT.power + random.normalvariate(0, 1), angle, rayT.end_node,
+                RecivedRay(self.position, rayT.power + random.triangular(-2, 2), angle, rayT.end_node,
                            rayT.start_node))
 
     def findMissingRays(self):
         missing_ref_rays = []
+        self.missing_rays = []
         for refRay in self.ref_ray_list:
             if checkifrayinlist(refRay, self.ray_list):
                 continue
@@ -135,9 +136,9 @@ class Node():
         if len(missing_ref_rays) > 0:
             missing_rays = []
             for rayT in missing_ref_rays:
-                angle = (rayT.getAngle() + random.normalvariate(0, 1)) % 360
+                angle = (rayT.getAngle() + random.triangular(-2, 2)) % 360
                 missing_rays.append(
-                    RecivedRay(self.position, rayT.power + random.normalvariate(0, 1), angle, rayT.end_node,
+                    RecivedRay(self.position, rayT.power + random.triangular(-2, 2), angle, rayT.end_node,
                                rayT.start_node))
             for ray in missing_rays:
                 rayt = ray.traceBack()
@@ -145,6 +146,7 @@ class Node():
                     self.missing_rays.append(rayt)
 
     def retraceAllRecievedRays(self):
+        self.retraced_rays = []
         for ray in self.ray_list:
             rayt = ray.traceBack()
             if rayt is not None:
@@ -157,7 +159,6 @@ class Node():
             ray.plot(ax)
 
     def traceBack(self, angle_list, end_node):
-        global map, MO
         for angle in angle_list:
             rayT = RayTrace(self.position, self.tx_power, angle, self)
             if traceToEnd(rayT, map):
@@ -176,8 +177,8 @@ class Node():
 
     def repeat(self):
         self.recieveRays()
-        self.findMissingRays()
         self.retraceAllRecievedRays()
+        self.findMissingRays()
 
 
 class RayTrace():
@@ -189,10 +190,10 @@ class RayTrace():
         self.end_node = None
         self.reflection_count = 0
 
-    def setEndNode(self, end_node: Node):
+    def setEndNode(self, point: geometry.Point, end_node: Node):
         self.end_node = end_node
         self.vector = None
-        self.position_list.append(end_node.position)
+        self.position_list.append(point)
 
     def getAngle(self):
         if len(self.position_list) >= 2:
@@ -214,9 +215,9 @@ class RayTrace():
     def getCurrPoint(self):
         return geometry.Point(*self.position_list[-1])
 
-    def plot(self, ax):
+    def plot(self, ax, color='b'):
         x, y = self.getShape().xy
-        ax.plot(x, y)
+        ax.plot(x, y, color)
 
     def applyLoss(self, loss):
         self.power -= loss
@@ -298,7 +299,7 @@ class Map():
         if len(self.getAllMissingRays()) == 0:
             return
         for ray in self.getAllMissingRays():
-            ray.plot(ax)
+            ray.plot(ax, 'r')
 
     def retraceAllNodes(self):
         for node in self.node_list:
@@ -328,7 +329,7 @@ def checkifrayinlist(ray: RayTrace, list: List):
     for refRay in list:
         ref_angle = refRay.getAngle()
         angle = ray.getAngle()
-        if refRay.power > ray.power - 4 and refRay.power < ray.power + 4 and ref_angle > angle - 4 and ref_angle < angle + 4:
+        if   ref_angle > angle - 4 and ref_angle < angle + 4 and refRay.power > ray.power - 10 and refRay.power < ray.power + 10:
             return True
     return False
 
@@ -362,6 +363,12 @@ def readmapfromfile(filename):
 def getClosestPoint(point1, point_list):
     if type(point_list) == geometry.Point:
         return point_list
+    elif type(point_list)==geometry.LineString:
+        ends = point_list.coords
+        if point1.distance(geometry.Point(ends[0])) < point1.distance(geometry.Point(ends[1])):
+            return ends[0]
+        else:
+            return ends[1]
     else:
         dist = [[x, x.distance(point1)] for x in point_list if x.distance(point1) > 0.01]
         dist.sort(key=lambda x: x[1])
@@ -398,13 +405,14 @@ def rayTracing(rayT: RayTrace, map: Map):
     if rayT.distanceLoss(distance):
         if type(reflectionObject) == Node:  # check if node and if startnode
             if not rayT.start_node == reflectionObject:
-                rayT.setEndNode(reflectionObject)
+                new_point = getClosestPoint(geometry.Point(rayT.position_list[-1]), reflectionPoint)
+                rayT.setEndNode(new_point, reflectionObject)
                 return "end"
             else:
                 return "loss"
         else:
-            new_point = getClosestPoint(geometry.Point(rayT.position_list[-1]), reflectionPoint)
             try:
+                new_point = getClosestPoint(geometry.Point(rayT.position_list[-1]), reflectionPoint)
                 new_angle = getReflectionAngle(geometry.LineString([rayT.position_list[-1], rayT.vector]),
                                                reflectionObject.getLineStringonPoint(new_point))
             except:
@@ -440,6 +448,12 @@ def checkIfObjectIntersects(main_obj: geometry.Point, list: List):
             return True
     return False
 
+def checkIfObjectIntersectsAll(main_obj: geometry.Point, list: List):
+    mo_shape = main_obj.buffer(MO.radius)
+    for element in list:
+        if not mo_shape.intersects(element.getShape()):
+            return False
+    return True
 
 def generateHeatmap(map: Map):
     heatmap = numpy.zeros((int(map.width / 5), int(map.height / 5)))
@@ -447,26 +461,25 @@ def generateHeatmap(map: Map):
     for row in range(map.width):
         for cell in range(map.height):
             object = geometry.Point([row, cell])
-            if checkIfObjectIntersects(object, map.getAllMissingRays()) and not checkIfObjectIntersects(object,
+            if checkIfObjectIntersectsAll(object, map.getAllMissingRays()) and not checkIfObjectIntersects(object,
                                                                                                         map.objectList):
                 heatmap[int((row - row % 5) / 5)][int((cell - cell % 5) / 5)] += 1
 
     return heatmap
 
-
 def displayHeatMap(heatMap, estimatedPos, i):
     # dorzucić jakby okręgi przewidywania od tego miejsca i cacy
-    heatMap[estimatedPos[0], estimatedPos[1]] += 50
+    #heatMap[estimatedPos[0], estimatedPos[1]] += 50
     heatMap = numpy.rot90(heatMap, k=1)
     pyplot.figure(2)
     pyplot.axis('off')
     pyplot.title("Room heatmap")
     pyplot.imshow(heatMap, cmap='viridis')
+    pyplot.clim(0, 10)
     pyplot.colorbar()
     pyplot.show()
     string = 'heatmap' + str(i) + '.png'
     pyplot.imsave(string, heatMap)
-
 
 def room_update():
     pass
@@ -484,13 +497,14 @@ if __name__ == '__main__':
     ax.set_ylim([-1, 301])
     ax2.set_xlim([-1, 300])
     ax2.set_ylim([-1, 301])
-    MO = MainObject([130, 256])
+    MO = MainObject([135, 250])
+    #MO = MainObject([200, 170])
     map = readmapfromfile("C:\\Users\\marcin\\Desktop\\ES\\passivRadioLoc\\resources\\mapSettings.txt")
     map.plot(ax)
     map.once()
     for el in ray_list:
         el.plot(ax)
-    room_GUI = room_integrated_GUI.GUI(map)
+    #room_GUI = room_integrated_GUI.GUI(map)
     # Main loop
     i = 1
     while True:
@@ -502,20 +516,69 @@ if __name__ == '__main__':
         map.plotMissingRays(ax2)
         heatmap = generateHeatmap(map)
         x, y = numpy.where(heatmap == numpy.max(heatmap))
-        print("Estymacja")
-        print("x= " + str(numpy.mean(x) * 5))
-        print("y= " + str(numpy.mean(y) * 5))
-        print("Rzeczywista pozycja")
-        print(MO.getPosition())
-        estimatedPos = [round(numpy.mean(x)), round(numpy.mean(y))]
+        if numpy.max(heatmap) != 0:
+            print("Estymacja")
+            print("x= " + str(numpy.mean(x) * 5))
+            print("y= " + str(numpy.mean(y) * 5))
+            print("Rzeczywista pozycja")
+            print(MO.getPosition())
+            estimatedPos = [round(numpy.mean(x)), round(numpy.mean(y))]
+        else:
+             estimatedPos = [0, 0]
         displayHeatMap(heatmap, estimatedPos, i)
         log('estymacja.csv', [numpy.mean(x), numpy.mean(y)])
         log('real.csv', MO.getPosition())
-        room_GUI.main_loop()
+        #room_GUI.main_loop()
         pyplot.show()
-        fig.canvas.draw()
-        # MO.move(-50, -50)
-        MO.changePosition(room_GUI.getCurrentPos())
-        i += 1
-        if i == 4:
+        # Koniec pierwszej iteracji
+
+        # Zmiana pozycji
+        MO.changePosition([200, 130])
+        for node in map.node_list:
+            node.missing_rays = []
+        fig, (ax, ax2) = pyplot.subplots(1, 2)
+        ax.set_xlim([-1, 300])
+        ax.set_ylim([-1, 301])
+        ax2.set_xlim([-1, 300])
+        ax2.set_ylim([-1, 301])
+        map.plot(ax)
+        # z tym map.once() czy bez, ten sam issue jest
+        # map.once()
+        for el in ray_list:
+            el.plot(ax)
+        while True:
+            MO.plot(ax)
+            MO.plot(ax2)
+            map.plot(ax2)
+            map.repeat()
+            map.plotRetracedRays(ax2)
+            map.plotMissingRays(ax2)
+            heatmap = generateHeatmap(map)
+            x, y = numpy.where(heatmap == numpy.max(heatmap))
+            if numpy.max(heatmap) != 0:
+                print("Estymacja")
+                print("x= " + str(numpy.mean(x) * 5))
+                print("y= " + str(numpy.mean(y) * 5))
+                print("Rzeczywista pozycja")
+                print(MO.getPosition())
+                estimatedPos = [round(numpy.mean(x)), round(numpy.mean(y))]
+            else:
+                estimatedPos = [0, 0]
+            displayHeatMap(heatmap, estimatedPos, i)
+            log('estymacja.csv', [numpy.mean(x), numpy.mean(y)])
+            log('real.csv', MO.getPosition())
+            # room_GUI.main_loop()
+            pyplot.show()
             break
+        break
+        #MO.changePosition([50, 70])
+        #MO.move(30, -200)
+        #MO.changePosition(room_GUI.getCurrentPos())
+        # i += 1
+        # if i == 2:
+        #     break
+        #     MO.changePosition([220, 250])
+        # else:
+        #     MO.changePosition([135, 250])
+        # if i == 4:
+        #     break
