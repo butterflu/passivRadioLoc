@@ -6,7 +6,7 @@ from shapely import geometry
 import matplotlib.pyplot as pyplot
 from descartes import PolygonPatch
 import csv
-#from main_script import room_integrated_GUI
+from main_script import room_integrated_GUI
 import os
 
 # global variables
@@ -16,6 +16,7 @@ wall_loss = 20
 ray_list = []
 angle_err = 2
 random.seed(time.time())
+automated = False   # object moves on fixed track, when false code is run with GUI
 
 
 class MainObject():
@@ -469,9 +470,8 @@ def generateHeatmap(map: Map):
 
     return heatmap
 
-def displayHeatMap(heatMap, estimatedPos, i):
-    # dorzucić jakby okręgi przewidywania od tego miejsca i cacy
-    #heatMap[estimatedPos[0], estimatedPos[1]] += 50
+
+def displayHeatMap(heatMap, i):
     heatMap = numpy.rot90(heatMap, k=1)
     pyplot.figure(2)
     pyplot.axis('off')
@@ -483,104 +483,70 @@ def displayHeatMap(heatMap, estimatedPos, i):
     string = 'heatmap' + str(i) + '.png'
     pyplot.imsave(string, heatMap)
 
-def room_update():
-    pass
-
-
 def log(file, data):
     with open(file, "a", newline='') as f:
         writer = csv.writer(f)
         writer.writerow(data)
 
-
-if __name__ == '__main__':
+def drawSendRays():
     fig, (ax, ax2) = pyplot.subplots(1, 2)
     ax.set_xlim([-1, 300])
     ax.set_ylim([-1, 301])
     ax2.set_xlim([-1, 300])
     ax2.set_ylim([-1, 301])
-    # MO = MainObject([135, 250])
-    MO = MainObject([200, 170])
-    map = readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\\passivRadioLoc\\resources\\mapSettings.txt")
     map.plot(ax)
-    map.once()
     for el in ray_list:
         el.plot(ax)
-    #room_GUI = room_integrated_GUI.GUI(map)
+    pyplot.ioff()
+    return fig, (ax, ax2)
+
+def updateMap():
+    MO.plot(ax)
+    MO.plot(ax2)
+    map.plot(ax2)
+    map.repeat()
+    map.plotRetracedRays(ax2)
+    map.plotMissingRays(ax2)
+    heatmap = generateHeatmap(map)
+    x, y = numpy.where(heatmap == numpy.max(heatmap))
+    if numpy.max(heatmap) != 0:
+        estimated_x = numpy.mean(x) * 5
+        estimated_y = numpy.mean(y) * 5
+        print("Estymacja")
+        print("x= " + str(estimated_x))
+        print("y= " + str(estimated_y))
+        print("Rzeczywista pozycja")
+        print(MO.getPosition())
+        estimatedPos = [estimated_x, estimated_y]
+    else:
+        estimatedPos = [0, 0]
+    displayHeatMap(heatmap, i)
+    log('estymacja.csv', [estimatedPos[0], estimatedPos[1]])
+    log('real.csv', MO.getPosition())
+    if not automated:
+        room_GUI.main_loop()
+        MO.changePosition(room_GUI.getCurrentPos())
+    else:
+        MO.changePosition([200, 130])
+    pyplot.show()
+
+def clearMissingRays():
+    for node in map.node_list:
+        node.missing_rays = []
+
+if __name__ == '__main__':
+    MO = MainObject([130, 250])
+    map = readmapfromfile("C:\\Users\\marcin\\Desktop\\ES\\passivRadioLoc\\resources\\mapSettings.txt")
+    map.once()
+    fig, (ax, ax2) = drawSendRays()
+    if not automated:
+        room_GUI = room_integrated_GUI.GUI(map)
     # Main loop
     i = 1
     while True:
-        MO.plot(ax)
-        MO.plot(ax2)
-        map.plot(ax2)
-        map.repeat()
-        map.plotRetracedRays(ax2)
-        map.plotMissingRays(ax2)
-        heatmap = generateHeatmap(map)
-        x, y = numpy.where(heatmap == numpy.max(heatmap))
-        if numpy.max(heatmap) != 0:
-            print("Estymacja")
-            print("x= " + str(numpy.mean(x) * 5))
-            print("y= " + str(numpy.mean(y) * 5))
-            print("Rzeczywista pozycja")
-            print(MO.getPosition())
-            estimatedPos = [round(numpy.mean(x)), round(numpy.mean(y))]
-        else:
-             estimatedPos = [0, 0]
-        displayHeatMap(heatmap, estimatedPos, i)
-        log('estymacja.csv', [numpy.mean(x), numpy.mean(y)])
-        log('real.csv', MO.getPosition())
-        #room_GUI.main_loop()
-        pyplot.show()
-        # Koniec pierwszej iteracji
-
-        # Zmiana pozycji
-        MO.changePosition([135, 250])
-        for node in map.node_list:
-            node.missing_rays = []
-        fig, (ax, ax2) = pyplot.subplots(1, 2)
-        ax.set_xlim([-1, 300])
-        ax.set_ylim([-1, 301])
-        ax2.set_xlim([-1, 300])
-        ax2.set_ylim([-1, 301])
-        map.plot(ax)
-        # z tym map.once() czy bez, ten sam issue jest
-        # map.once()
-        for el in ray_list:
-            el.plot(ax)
-        while True:
-            MO.plot(ax)
-            MO.plot(ax2)
-            map.plot(ax2)
-            map.repeat()
-            map.plotRetracedRays(ax2)
-            map.plotMissingRays(ax2)
-            heatmap = generateHeatmap(map)
-            x, y = numpy.where(heatmap == numpy.max(heatmap))
-            if numpy.max(heatmap) != 0:
-                print("Estymacja")
-                print("x= " + str(numpy.mean(x) * 5))
-                print("y= " + str(numpy.mean(y) * 5))
-                print("Rzeczywista pozycja")
-                print(MO.getPosition())
-                estimatedPos = [round(numpy.mean(x)), round(numpy.mean(y))]
-            else:
-                estimatedPos = [0, 0]
-            displayHeatMap(heatmap, estimatedPos, i)
-            log('estymacja.csv', [numpy.mean(x), numpy.mean(y)])
-            log('real.csv', MO.getPosition())
-            # room_GUI.main_loop()
-            pyplot.show()
+        updateMap()
+        clearMissingRays()
+        fig, (ax, ax2) = drawSendRays()
+        i += 1
+        if i == 3:
             break
-        break
-        #MO.changePosition([50, 70])
-        #MO.move(30, -200)
-        #MO.changePosition(room_GUI.getCurrentPos())
-        # i += 1
-        # if i == 2:
-        #     break
-        #     MO.changePosition([220, 250])
-        # else:
-        #     MO.changePosition([135, 250])
-        # if i == 4:
-        #     break
