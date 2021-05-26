@@ -11,7 +11,7 @@ wall
 #node pos x, pos y
 node
 200
-200
+190
 wall
 100
 200

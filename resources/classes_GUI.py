@@ -111,8 +111,7 @@ class Node():
     def recieveRays(self):
         self.ray_list = []
         for rayT in self.reference_rays:
-            applyObjectLoss(MO, rayT)
-            if rayT.power == 0:
+            if checkIfRayCrossesObject(MO, rayT):
                 continue
             angle = (rayT.getAngle() + random.triangular(-2, 2)) % 360
             self.ray_list.append(
@@ -120,6 +119,7 @@ class Node():
                            rayT.start_node))
 
     def recieveRefRays(self):  # do once
+        self.ref_ray_list = []
         for rayT in self.reference_rays:
             angle = (rayT.getAngle() + random.triangular(-0.5, 0.5)) % 360  # losowa pomyłka
             self.ref_ray_list.append(
@@ -398,7 +398,7 @@ def rayTracing(rayT: RayTrace, map: Map):
         if rayShape.crosses(objShape):
             inter = rayShape.intersection(objShape)
             dist2 = rayT.getCurrPoint().distance(inter)
-            if distance == 0 or dist2 < distance:
+            if (distance == 0 or abs(dist2) < abs(distance)) and (not rayT.start_node == obj):
                 distance = dist2
                 reflectionObject = obj
                 reflectionPoint = inter
@@ -436,9 +436,11 @@ def traceToEnd(rayT: RayTrace, map: Map):
             return False
 
 
-def applyObjectLoss(main_obj: MainObject, ray: RayTrace):
+def checkIfRayCrossesObject(main_obj: MainObject, ray: RayTrace):
     if ray.getShape().intersects(main_obj.getShape()):
-        ray.power = 0
+        return True
+    else:
+        return False
 
 
 def checkIfObjectIntersects(main_obj: geometry.Point, list: List):
@@ -497,9 +499,9 @@ if __name__ == '__main__':
     ax.set_ylim([-1, 301])
     ax2.set_xlim([-1, 300])
     ax2.set_ylim([-1, 301])
-    MO = MainObject([135, 250])
-    #MO = MainObject([200, 170])
-    map = readmapfromfile("C:\\Users\\marcin\\Desktop\\ES\\passivRadioLoc\\resources\\mapSettings.txt")
+    # MO = MainObject([135, 250])
+    MO = MainObject([200, 170])
+    map = readmapfromfile("C:\\Users\\benia\\Desktop\\programy\\programowanie\\RadioLoc\\passivRadioLoc\\resources\\mapSettings.txt")
     map.plot(ax)
     map.once()
     for el in ray_list:
@@ -533,7 +535,7 @@ if __name__ == '__main__':
         # Koniec pierwszej iteracji
 
         # Zmiana pozycji
-        MO.changePosition([200, 130])
+        MO.changePosition([135, 250])
         for node in map.node_list:
             node.missing_rays = []
         fig, (ax, ax2) = pyplot.subplots(1, 2)

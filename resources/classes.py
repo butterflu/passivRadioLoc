@@ -105,8 +105,7 @@ class Node():
     def recieveRays(self):
         self.ray_list = []
         for rayT in self.reference_rays:
-            applyObjectLoss(MO, rayT)
-            if rayT.power == 0:
+            if checkIfRayCrossesObject(MO, rayT):
                 continue
             angle = (rayT.getAngle() + random.triangular(-2, 2)) % 360
             self.ray_list.append(
@@ -430,9 +429,11 @@ def traceToEnd(rayT: RayTrace, map: Map):
             return False
 
 
-def applyObjectLoss(main_obj: MainObject, ray: RayTrace):
+def checkIfRayCrossesObject(main_obj: MainObject, ray: RayTrace):
     if ray.getShape().intersects(main_obj.getShape()):
-        ray.power = 0
+        return True
+    else:
+        return False
 
 
 def checkIfObjectIntersects(main_obj: geometry.Point, list: List):
