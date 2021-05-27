@@ -36,8 +36,8 @@ class GUI:
             # if isinstance(object, classes_GUI.Wall):
             if type(object).__name__ == "Wall":
                 self.wall = pygame.draw.rect(self.surface, gray, pygame.Rect(int(scale * object.position[0]),
-                                                                   int(self.surface_size[1] - scale * object.position[1]),
-                                                                   int(scale * object.size[0]),
+                                                                   int(self.surface_size[1] - scale * object.position[1] + object.size[1]),
+                                                                   int(scale * object.size[0]/2),
                                                                    int(scale * (-object.size[1]))))
                 self.wall_list.append(self.wall)
             #if isinstance(object, classes_GUI.Node):
