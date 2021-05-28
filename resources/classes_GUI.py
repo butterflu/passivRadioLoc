@@ -356,11 +356,11 @@ class Map():
 
 
 # functions
-def checkifrayinlist(ray: RayTrace, list: List):
-    for refRay in list:
-        ref_angle = refRay.getAngle()
+def checkifrayinlist(refRay: RayTrace, list: List):
+    for ray in list:
         angle = ray.getAngle()
-        if   ref_angle > angle - 4 and ref_angle < angle + 4 and refRay.power > ray.power - 10 and refRay.power < ray.power + 10:
+        ref_angle = ray.getAngle()
+        if   angle > ref_angle - 4 and angle < ref_angle + 4 and ray.power > refRay.power - 10 and ray.power < refRay.power + 10:
             return True
     return False
 
